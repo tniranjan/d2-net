@@ -11,11 +11,11 @@ def process_multiscale(image, model, scales=[.5, 1, 2]):
     device = image.device
     assert(b == 1)
 
-    all_keypoints = torch.zeros([3, 0])
+    all_keypoints = torch.zeros([3, 0], device=device)
     all_descriptors = torch.zeros([
         model.dense_feature_extraction.num_channels, 0
-    ])
-    all_scores = torch.zeros(0)
+    ], device=device)
+    all_scores = torch.zeros(0, device=device)
 
     previous_dense_features = None
     banned = None
@@ -49,11 +49,11 @@ def process_multiscale(image, model, scales=[.5, 1, 2]):
             )
         else:
             banned = torch.max(detections, dim=1)[0].unsqueeze(1)
-        fmap_pos = torch.nonzero(detections[0].cpu()).t()
+        fmap_pos = torch.nonzero(detections[0]).t()
         del detections
 
         # Recover displacements.
-        displacements = model.localization(dense_features)[0].cpu()
+        displacements = model.localization(dense_features)[0]
         displacements_i = displacements[
             0, fmap_pos[0, :], fmap_pos[1, :], fmap_pos[2, :]
         ]
@@ -90,23 +90,22 @@ def process_multiscale(image, model, scales=[.5, 1, 2]):
         keypoints = upscale_positions(fmap_keypoints, scaling_steps=2)
         del fmap_keypoints
 
-        descriptors = F.normalize(raw_descriptors, dim=0).cpu()
+        descriptors = F.normalize(raw_descriptors, dim=0)
         del raw_descriptors
 
         keypoints[0, :] *= h_init / h_level
         keypoints[1, :] *= w_init / w_level
 
-        fmap_pos = fmap_pos.cpu()
-        keypoints = keypoints.cpu()
+        fmap_pos = fmap_pos
+        keypoints = keypoints
 
         keypoints = torch.cat([
             keypoints,
-            torch.ones([1, keypoints.size(1)]) * 1 / scale,
+            torch.ones([1, keypoints.size(1)], device = keypoints.device) * 1 / scale,
         ], dim=0)
-
         scores = dense_features[
             0, fmap_pos[0, :], fmap_pos[1, :], fmap_pos[2, :]
-        ].cpu() / (idx + 1)
+        ] / (idx + 1)
         del fmap_pos
 
         all_keypoints = torch.cat([all_keypoints, keypoints], dim=1)
@@ -118,10 +117,10 @@ def process_multiscale(image, model, scales=[.5, 1, 2]):
         del dense_features
     del previous_dense_features, banned
 
-    keypoints = all_keypoints.t().numpy()
+    keypoints = all_keypoints.t()
     del all_keypoints
-    scores = all_scores.numpy()
+    scores = all_scores
     del all_scores
-    descriptors = all_descriptors.t().numpy()
+    descriptors = all_descriptors.t()
     del all_descriptors
     return keypoints, scores, descriptors
